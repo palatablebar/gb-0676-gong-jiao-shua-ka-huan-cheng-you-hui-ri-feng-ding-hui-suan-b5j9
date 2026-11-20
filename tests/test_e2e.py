@@ -3,11 +3,28 @@ from app.pipeline import execute,load_sample
 from app import store
 def test_full_sample_flow(client):
     r=client.post("/api/runs",json={"sample":"dirty.csv"});assert r.status_code==200
-    p=r.get_json();assert len(p["stages"])==7
+    p=r.get_json();assert len(p["stages"])==8
+    assert p["stages"][6]["metrics"]["balanced"] is True
     assert p["stages"][5]["metrics"]["balanced"] is True
 def test_idempotent_real_input(sample):
     a=execute(sample);b=execute(sample)
     assert a["run_id"]==b["run_id"] and len(store.history())==1
+def test_rerun_adds_no_funding_shares(sample):
+    "同一批补算或重跑不新增资金份额"
+    a=execute(sample);b=execute(sample)
+    la=a["stages"][5]["ledger"];lb=b["stages"][5]["ledger"]
+    assert la==lb and len(la)==8
+    assert sum(1 for run in store.history() if run["run_id"]==a["run_id"])==1
+def test_failed_rerun_keeps_old_ledger(client,sample):
+    "规则读取失败保留完整旧版账"
+    p=client.post("/api/runs",json={"sample":"dirty.csv"}).get_json()
+    assert client.post("/api/runs",json={"sample":"dirty.csv","parameters":{"daily_cap":"-1"}}).status_code==422
+    assert client.post("/api/runs",json={"sample":"dirty.csv","parameters":{"daily_cap":"abc"}}).status_code==422
+    assert len(store.history())==1
+    kept=client.get("/api/runs/"+p["run_id"]).get_json()
+    ledger=kept["stages"][5]["ledger"]
+    assert len(ledger)==8 and kept["stages"][5]["metrics"]["balanced"] is True
+    assert all(line["status"]=="对平" for line in ledger)
 def test_stale_review_409(client):
     "TRAP-26 陈旧复核不得覆盖新版本"
     p=client.post("/api/runs",json={"sample":"dirty.csv"}).get_json();u="/api/runs/"+p["run_id"]+"/review"
@@ -18,6 +35,12 @@ def test_export_has_manifest_and_quarantine(client):
     r=client.get("/api/runs/"+p["run_id"]+"/archive")
     rows=list(csv.reader(io.StringIO(r.data.decode("utf-8-sig"))))
     assert rows[0][1]=="input_sha256" and any(x[3]=="quarantine" for x in rows[1:])
+def test_export_has_funding_ledger(client):
+    p=client.post("/api/runs",json={"sample":"dirty.csv"}).get_json()
+    r=client.get("/api/runs/"+p["run_id"]+"/archive")
+    rows=list(csv.reader(io.StringIO(r.data.decode("utf-8-sig"))))
+    funding=[x for x in rows[1:] if x[3]=="funding"]
+    assert len(funding)==8 and all(x[5]=="对平" for x in funding)
 def test_failed_import_is_atomic(client):
     assert client.post("/api/runs",json={"csv":"bad"}).status_code==422
     assert store.history()==[]

@@ -11,8 +11,9 @@
 | M3 票价版本 | 查看并运行票价版本 | `/api/fares` | `app/modules/m3_fares/rules.py` | `tests/test_m3.py` |
 | M4 行程配对 | 查看并运行行程配对 | `/api/journeys` | `app/modules/m4_journeys/rules.py` | `tests/test_m4.py` |
 | M5 优惠回算 | 查看并运行优惠回算 | `/api/discounts` | `app/modules/m5_discounts/rules.py` | `tests/test_m5.py` |
-| M6 清分对账 | 查看并运行清分对账 | `/api/clearing` | `app/modules/m6_clearing/rules.py` | `tests/test_m6.py` |
-| M7 日结归档 | 查看并运行日结归档 | `/api/settlement` | `app/modules/m7_settlement/rules.py` | `tests/test_m7.py` |
+| M6 资金确认 | 查看并运行资金确认 | `/api/funding` | `app/modules/m6_funding/rules.py` | `tests/test_m6.py` |
+| M7 清分对账 | 查看并运行清分对账 | `/api/clearing` | `app/modules/m7_clearing/rules.py` | `tests/test_m7.py` |
+| M8 日结归档 | 查看并运行日结归档 | `/api/settlement` | `app/modules/m8_settlement/rules.py` | `tests/test_m8.py` |
 
 ## 陷阱登记
 
@@ -31,10 +32,13 @@
 | TRAP-11 | 混合偏移 | 落错版本 | UTC归整 | `app/values.py` | `tests/test_m3.py::test_timezone_equal` |
 | TRAP-23 | 换乘截止点 | 重复优惠 | 截止点排除 | `app/modules/m5_discounts/rules.py` | `tests/test_m5.py::test_exact_window_excluded` |
 | TRAP-25 | 票价重叠 | 随意取版 | 冲突隔离 | `app/modules/m3_fares/rules.py` | `tests/test_m3.py::test_overlap_rejected` |
+| TRAP-27 | 双优惠重复确认 | 两类资金各按原票价确认同一差额 | 先换乘后封顶按各自份额分账，卡日唯一账 | `app/modules/m6_funding/rules.py` | `tests/test_m6.py::test_double_trigger_split_no_double_count` |
 
 ## 对账规则
 
 输入原始逻辑行=最终采纳来源行+隔离来源行+重复行+空白行+分段表头。派生记录用_sources保存完整来源，因此分组不丢行。业务预期合计与上游申报合计之差等于逐行差异之和。结果按输入摘要、规则版本及参数产生唯一批次，事务写入；同源重跑只复用已有批次。
+
+资金确认按（卡号，业务日）聚成唯一确认账行：换乘资金只确认换乘份额、封顶资金只确认封顶份额，同一行程同时触发两类优惠时按"先换乘、后封顶"顺序分账，同一差额不被两类资金重复确认。每条行程与每个卡日均满足 基础票价=实扣+换乘确认+封顶确认 的分币守恒；失衡账行只标记不封存。同一批补算或重跑复用原批次，不新增资金份额；规则参数读取失败时整批拒绝写入，保留完整旧版账。资金确认未对平（balanced为假）时，日结归档拒绝封存；清分阶段对资金确认合计与应扣合计做交叉核对，不一致即拒绝。
 
 ## 已知不覆盖
 

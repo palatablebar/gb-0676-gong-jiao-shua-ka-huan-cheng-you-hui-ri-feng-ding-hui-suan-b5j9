@@ -18,12 +18,13 @@ docker compose exec -T app pytest -q
 - 3. 票价版本：`/fares`，`/api/fares`。
 - 4. 行程配对：`/journeys`，`/api/journeys`。
 - 5. 优惠回算：`/discounts`，`/api/discounts`。
-- 6. 清分对账：`/clearing`，`/api/clearing`。
-- 7. 日结归档：`/settlement`，`/api/settlement`。
+- 6. 资金确认：`/funding`，`/api/funding`。
+- 7. 清分对账：`/clearing`，`/api/clearing`。
+- 8. 日结归档：`/settlement`，`/api/settlement`。
 
 ## 核心规则
 
-换乘按上次有效付费行程的时间窗计算，优惠与日封顶按确定顺序裁决并保留分币守恒。
+换乘按上次有效付费行程的时间窗计算，优惠与日封顶按确定顺序裁决并保留分币守恒。同一行程同时触发两类优惠时，按"先换乘、后封顶"分账：换乘资金只确认换乘份额，封顶资金只确认封顶份额，同一差额不重复补偿。资金确认按卡日聚成唯一账行，页面可核对原价、实扣、两类确认额及调整依据；未对平前不封存日结。
 
 ## 演示
 
